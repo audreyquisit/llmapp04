@@ -16,7 +16,7 @@ venv/
 .gitignore
 
 # Docker
-Dockerfile
+<!-- Dockerfile -->
 .dockerignore
 
 # Documentation
