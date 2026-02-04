@@ -1,0 +1,76 @@
+name: Promptfoo Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'promptfoo-tests/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'promptfoo-tests/**'
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'Base URL of the API to test'
+        required: false
+        default: 'http://localhost:8080'
+
+env:
+  API_BASE_URL: ${{ github.event.inputs.api_base_url || 'http://localhost:8080' }}
+
+jobs:
+  promptfoo-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      llm-python:
+        image: ${{ secrets.DOCKERHUB_USERNAME }}/llm-python:latest
+        ports:
+          - 8080:8080
+        env:
+          OLLAMA_BASE_URL: ${{ secrets.OLLAMA_BASE_URL }}
+          OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Wait for API to be ready
+        run: |
+          echo "Waiting for API to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8080/swagger-ui.html > /dev/null 2>&1; then
+              echo "API is ready!"
+              break
+            fi
+            echo "Attempt $i: API not ready yet, waiting..."
+            sleep 5
+          done
+
+      - name: Run Promptfoo classify tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c classify.yaml
+        continue-on-error: true
+
+      - name: Run Promptfoo sentiment tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c sentiment.yaml
+        continue-on-error: true
+
+      - name: Run Promptfoo summarize tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c summarize.yaml
+        continue-on-error: true
+
+      - name: Run Promptfoo intent tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c intent.yaml
+        continue-on-error: true
+
