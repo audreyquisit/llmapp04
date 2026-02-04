@@ -1,0 +1,71 @@
+name: Promptfoo Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'promptfoo-tests/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'promptfoo-tests/**'
+  workflow_dispatch:
+
+jobs:
+  promptfoo-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build and start llm-python container
+        run: |
+          docker build -t llm-python ./llm-python
+          docker run -d --name llm-python -p 8080:8080 \
+            -e OLLAMA_BASE_URL=${{ secrets.OLLAMA_BASE_URL }} \
+            -e OLLAMA_MODEL=${{ secrets.OLLAMA_MODEL }} \
+            -e OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }} \
+            llm-python
+
+      - name: Wait for API to be ready
+        run: |
+          echo "Waiting for API to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8080/swagger-ui.html > /dev/null 2>&1; then
+              echo "API is ready!"
+              break
+            fi
+            echo "Attempt $i: API not ready yet, waiting..."
+            sleep 5
+          done
+
+      - name: Run Promptfoo classify tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c classify.yaml
+        continue-on-error: true
+
+      - name: Run Promptfoo sentiment tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c sentiment.yaml
+        continue-on-error: true
+
+      - name: Run Promptfoo summarize tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c summarize.yaml
+        continue-on-error: true
+
+      - name: Run Promptfoo intent tests
+        working-directory: ./promptfoo-tests
+        run: npx promptfoo@latest eval -c intent.yaml
+        continue-on-error: true
+
+      - name: Stop container
+        if: always()
+        run: docker stop llm-python || true
+
